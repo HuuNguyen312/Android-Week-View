@@ -1,6 +1,7 @@
 package com.alamkanak.weekview
 
 import android.content.Context
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.MotionEvent.ACTION_DOWN
@@ -44,7 +45,7 @@ class WeekViewGestureHandler internal constructor(
     private val scaledTouchSlop = context.scaledTouchSlop
 
     override fun onDown(e: MotionEvent): Boolean {
-        goToNearestOrigin()
+//        goToNearestOrigin()
         return true
     }
 
@@ -127,7 +128,22 @@ class WeekViewGestureHandler internal constructor(
             direction = currentFlingDirection,
             viewState = viewState
         )
-        navigator.scrollHorizontallyTo(date = destinationDate)
+        Log.d("onFlingHorizontal", "${destinationDate.time}")
+        navigator.scrollHorizontallyTo(date = destinationDate, onFinished = {
+            currentFlingDirection = None
+        })
+    }
+
+    private fun onFlingHorizontal2(distanceX: Float) {
+        val destinationDate = preFlingFirstVisibleDate.performFling2(
+            direction = currentScrollDirection,
+            viewState = viewState,
+            distanceX
+        )
+        Log.d("onFlingHorizontal", "${destinationDate.time}")
+        navigator.scrollHorizontallyTo(date = destinationDate, onFinished = {
+            currentFlingDirection = None
+        })
     }
 
     private fun onFlingVertical(
@@ -155,6 +171,7 @@ class WeekViewGestureHandler internal constructor(
 
         val nearestOrigin = viewState.currentOrigin.x - adjustedDaysFromOrigin * dayWidth
         if (nearestOrigin != 0f) {
+            Log.d("DDDDD", "scrollHorizontallyTo $adjustedDaysFromOrigin")
             navigator.scrollHorizontallyTo(offset = adjustedDaysFromOrigin * dayWidth)
         }
 
@@ -163,13 +180,20 @@ class WeekViewGestureHandler internal constructor(
         currentScrollDirection = currentFlingDirection
     }
 
+    var sX: Float = -1f
+
     fun onTouchEvent(event: MotionEvent): Boolean {
         scaleDetector.onTouchEvent(event)
         val handled = gestureDetector.onTouchEvent(event)
 
+        if(event.action == ACTION_UP) {
+            sX = event.rawX
+        }
         if (event.action == ACTION_UP && currentFlingDirection == None) {
             if (currentScrollDirection.isHorizontal) {
-                goToNearestOrigin()
+                val distanceX: Float = event.rawX - sX
+                onFlingHorizontal2(distanceX)
+//                goToNearestOrigin()
             }
             currentScrollDirection = None
         } else if (event.action == ACTION_DOWN) {
@@ -209,6 +233,36 @@ private fun Calendar.performFling(direction: Direction, viewState: ViewState): C
         else -> throw IllegalStateException()
     }
 }
+
+private fun Calendar.performFling2(direction: Direction, viewState: ViewState, distanceX: Float): Calendar {
+    val daysDelta = Days(viewState.numberOfVisibleDays)
+    return when (direction) {
+        Left -> {
+            when {
+                abs(distanceX) <= viewState.totalDayWidth / 2 -> this
+                viewState.isLtr -> {
+                    this + daysDelta
+                }
+                else -> {
+                    this - daysDelta
+                }
+            }
+        }
+        Right -> {
+            when {
+                abs(distanceX) <= viewState.totalDayWidth / 2 -> this
+                viewState.isLtr -> {
+                    this - daysDelta
+                }
+                else -> {
+                    this + daysDelta
+                }
+            }
+        }
+        else -> throw IllegalStateException()
+    }
+}
+
 
 private fun Navigator.performScroll(
     distanceX: Float,
